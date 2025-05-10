@@ -1,0 +1,83 @@
+---
+- name: Hosting Node
+  hosts: webservers
+  become: true
+
+  tasks:
+    - name: Updating the file
+      shell: apt update
+
+    - name: Installing nginx
+      apt:
+        name: nginx
+        state: present
+
+    - name: Stopping the service
+      service:
+        name: nginx
+        state: restarted
+        enabled: true
+      ignore_errors: yes
+
+    - name: Starting the service
+      service:
+        name: nginx
+        state: started
+        enabled: true
+
+    
+        
+    - name: Copying sites to the site-avaible
+      copy:
+        src: ./nodejs
+        dest: /etc/nginx/sites-available
+        mode: "0777"
+
+    - name: Checking does the file exists or not
+      stat:
+        path: /etc/nginx/sites-enabled/nodejs
+      register: nodejs_exists
+
+    - name: Linking to sites-enabled
+      shell: ln -s /etc/nginx/sites-available/nodejs /etc/nginx/sites-enabled/
+      when: not nodejs_exists
+
+    - name: Installing nodejs and npm
+      apt:
+        name:
+          - nodejs
+          - npm
+        state: present
+
+    - name: Creating the folder
+      file:
+        path: /var/www/html/node-app
+        state: directory
+        mode: "0777"
+
+    - name: Sending the file to the server
+      copy:
+        src: ./node-app
+        dest: /var/www/html/
+        mode: "0777"
+
+    - name: Installing packages
+      shell: npm install
+      args:
+        chdir: /var/www/html/node-app
+
+    - name: Installing pm2
+      npm:
+        name: pm2
+        state: present
+        global: true
+
+    - name: Removing the pm2
+      shell: pm2 delete node-app
+      ignore_errors: yes
+
+    - name: Starting pm2
+      shell: pm2 start /var/www/html/node-app/index.js --name node-app
+
+    - name: Setup PM2 startup script
+      shell: pm2 startup systemd -u {{ ansible_user }} --hp /home/{{ ansible_user }}
